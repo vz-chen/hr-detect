@@ -49,8 +49,16 @@ def imageSegment(image):
 
 def getROI(image, faceBox):
 
-    # get width and height fractions of facebox to specify ROI
+    # get width and height fractions of facebox to specify ROI (frac of face to be in ROI)
     widthFrac = WIDTH_FRAC
+    heightFrac = HEIGHT_FRAC
 
+    #adjust faceBox dimensions (e.g. eye=smaller ROI)
+    (x,y,w,h) = faceBox
+    widthOffset = int((1-widthFrac) * w/2)
+    heightOffset = int((1-heightFrac) * h/2)
+    new_faceBox = (x+widthFrac,y+heightFrac, int(w*widthFrac), int(h*heightFrac))
+
+    
     return 0
 
