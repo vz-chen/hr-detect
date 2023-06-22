@@ -14,5 +14,6 @@ def getPixels(pixels3D):
     pixels = pixels3D.reshape(numPixels, -1)
     return pixels
 
+# calculate 
 def probFgBg(pixels):
     return 0
