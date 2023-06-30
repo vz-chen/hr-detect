@@ -54,17 +54,21 @@ def getROI(image, faceBox):
     widthFrac = WIDTH_FRAC
     heightFrac = HEIGHT_FRAC
 
-    #adjust faceBox dimensions (e.g. eye=smaller ROI)
-    (x,y,w,h) = faceBox
-    widthOffset = int((1-widthFrac) * w/2)
-    heightOffset = int((1-heightFrac) * h/2)
-    new_faceBox = (x+widthOffset,y+heightOffset, int(w*widthFrac), int(h*heightFrac))
-    (x,y,w,h) = new_faceBox
+    # adjust faceBox dimensions (e.g. eye=smaller ROI)
+    (x, y, w, h) = faceBox
+    widthOffset = int((1 - widthFrac) * w / 2)
+    heightOffset = int((1 - heightFrac) * h / 2)
+    new_faceBox = (x + widthOffset, y + heightOffset, int(w * widthFrac), int(h * heightFrac))
+    (x, y, w, h) = new_faceBox
 
-    #adjust bgMask array, set bg to False and fg to True
-    bgMask = np.full(image.shape, True, bool) #initially change all bgMask elements to true
-    bgMask[y:y+h ; x:x+w ; :] = False # setting pixels of bg as False, so rest is true = fg
+    # adjust bgMask array, set bg to False and fg to True
+    bgMask = np.full(image.shape, True, dtype=bool) #initially change all bgMask elements to true
+    bgMask[y:y+h, x:x+w, :] = False # setting pixels of bg as False, so rest is true = fg
 
-    
-    return 0
+    (x, y, w, h) = faceBox
+
+    # TO-DO: add options for removing eyes or foreheado only
+
+    roi = np.ma.array(image, mask=bgMask) # Masked array
+    return roi
 
