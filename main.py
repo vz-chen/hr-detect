@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sklearn #may need smth more specific
 import ImageSegmentation
-import grabcut 
+# import grabcut 
 
 
 # ROI
@@ -24,7 +24,8 @@ HAAR_CASCADE = "haarcascade_frontalface_default.xml"
 faceCascade = cv2.CascadeClassifier(HAAR_CASCADE) # face detection trained to detect frontal faces
 
 # capture every frame
-while cap.isOpened():
+for i in range(20, -1, -1):
+    #while cap.isOpened():
     ret, frame = cap.read() # ret: bool, is camera available; frame: gets next frame
     if not ret:
         break
@@ -57,7 +58,12 @@ def getROI(image, faceBox):
     (x,y,w,h) = faceBox
     widthOffset = int((1-widthFrac) * w/2)
     heightOffset = int((1-heightFrac) * h/2)
-    new_faceBox = (x+widthFrac,y+heightFrac, int(w*widthFrac), int(h*heightFrac))
+    new_faceBox = (x+widthOffset,y+heightOffset, int(w*widthFrac), int(h*heightFrac))
+    (x,y,w,h) = new_faceBox
+
+    #adjust bgMask array, set bg to False and fg to True
+    bgMask = np.full(image.shape, True, bool) #initially change all bgMask elements to true
+    bgMask[y:y+h ; x:x+w ; :] = False # setting pixels of bg as False, so rest is true = fg
 
     
     return 0
