@@ -5,13 +5,29 @@ import matplotlib.pyplot as plt
 import sklearn #may need smth more specific
 import ImageSegmentation
 # import grabcut 
-
+import random
 
 # ROI
+REMOVE_EYES = False
+FOREHEAD_ONLY = False
+ADD_BOX_ERROR = False
+
 NUM_ITERATIONS = 0
 faceBox = 0 #temp
+
+MIN_FACE_SIZE = 100
+
 WIDTH_FRAC = 0
 HEIGHT_FRAC = 0
+
+EYE_LOWER_FRAC = 0.25
+EYE_UPPER_FRAC = 0.5
+
+BOX_ERROR_MAX = 0.5
+
+# plotting
+FPS = 15
+WINDOW_TIME_SEC = 30
 
 # GLOBAL FUNCTION
 ROIavgRBG = [] # stores the avg RBG values in each ROI (where analysis is performed)
@@ -54,17 +70,113 @@ def getROI(image, faceBox):
     widthFrac = WIDTH_FRAC
     heightFrac = HEIGHT_FRAC
 
-    #adjust faceBox dimensions (e.g. eye=smaller ROI)
-    (x,y,w,h) = faceBox
-    widthOffset = int((1-widthFrac) * w/2)
-    heightOffset = int((1-heightFrac) * h/2)
-    new_faceBox = (x+widthOffset,y+heightOffset, int(w*widthFrac), int(h*heightFrac))
-    (x,y,w,h) = new_faceBox
+    # adjust faceBox dimensions (e.g. eye=smaller ROI)
+    (x, y, w, h) = faceBox
+    widthOffset = int((1 - widthFrac) * w / 2)
+    heightOffset = int((1 - heightFrac) * h / 2)
+    new_faceBox = (x + widthOffset, y + heightOffset, int(w * widthFrac), int(h * heightFrac))
+    (x, y, w, h) = new_faceBox
 
-    #adjust bgMask array, set bg to False anhd fg to True
-    bgMask = np.full(image.shape, True, bool) #initially change all bgMask elements to true
-    bgMask[y:y+h , x:x+w , :] = False # setting pixels of bg as False, so rest is true = fg
+    # adjust bgMask array, set bg to False and fg to True
+    bgMask = np.full(image.shape, True, dtype=bool) #initially change all bgMask elements to true
+    bgMask[y:y+h, x:x+w, :] = False # setting pixels of bg as False, so rest is true = fg
 
+    (x, y, w, h) = faceBox
 
-    return 0
+    if REMOVE_EYES:
+        bgMask[y + h * EYE_LOWER_FRAC : y + h * EYE_UPPER_FRAC, :] = True
+    if FOREHEAD_ONLY:
+        bgMask[y + h * EYE_LOWER_FRAC :, :] = True
 
+    roi = np.ma.array(image, mask=bgMask) # Masked array
+    return roi
+
+def distanceROI(roi1, roi2):
+    squareDistance = 0 # no need to square root for real distance because only used for comparison
+    for i in range(len(roi1)): # len is 2
+        squareDistance += (roi1[i] - roi2[i])**2 # distance between x and y coords of two points
+    return squareDistance
+
+def getBestROI(frame, faceCascade, previousFaceBox):
+    grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # choose shade of grey
+    faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
+        minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.cv.CV_HAAR_SCALE_IMAGE) # detect faces
+    roi = None
+    faceBox = None
+
+    # If no face detected, use ROI from previous frame
+    if len(faces) == 0:
+        faceBox = previousFaceBox
+
+    # If many faces detected, use one closest to that from previous frame
+    elif len(faces) > 1:
+        if previousFaceBox is not None:
+            # Find closest to previous frame
+            minDist = distanceROI(previousFaceBox, face) # compare rest against first distance
+            for face in faces:
+                if distanceROI(previousFaceBox, face) < minDist:
+                    faceBox = face
+        else:
+            # Chooses largest box by area (most likely to be true face)
+            maxArea = 0
+            for face in faces:
+                if (face[2] * face[3]) > maxArea:
+                    faceBox = face
+
+    # If one face dectected, use face
+    else:
+        faceBox = faces[0]
+
+    if faceBox is not None:
+        if ADD_BOX_ERROR:
+            # add margin of error around faceBox coordinates
+            noise = []
+            for i in range(4): # for each four points x1, x2, y1, y2
+                noise.append(random.uniform(-BOX_ERROR_MAX, BOX_ERROR_MAX))
+            (x, y, w, h) = faceBox
+            x1 = x + int(noise[0] * w)
+            y1 = y + int(noise[1] * h)
+            x2 = x + w + int(noise[2] * w)
+            y2 = y + h + int(noise[3] * h)
+            faceBox = (x1, y1, x2-x1, y2-y1)
+
+        # Show rectangle
+        #(x, y, w, h) = faceBox
+        #cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 255, 255), 2)
+
+        roi = getROI(frame, faceBox)
+
+    return faceBox, roi
+
+def plotSignals(signals, label):
+    seconds = np.arange(0, WINDOW_TIME_SEC, 1.0 / FPS) # generate x-axis
+    colors = ["r", "g", "b"]
+    fig = plt.figure() # make blank figure
+    fig.patch.set_facecolor('white')
+    for i in range(3):
+        plt.plot(seconds, signals[:,i], colors[i]) # plot each signal against seconds
+    # label axis
+    plt.xlabel('Time (sec)', fontsize=17)
+    plt.ylabel(label, fontsize=17)
+    # set tick label sizes
+    plt.tick_params(axis='x', labelsize=17)
+    plt.tick_params(axis='y', labelsize=17)
+    # display figure
+    plt.show()
+
+def plotSpectrum(freqs, powerSpec):
+    idx = np.argsort(freqs) # sort freqs
+    fig = plt.figure() # make blank figure
+    fig.patch.set_facecolor('white')
+    for i in range(3):
+        plt.plot(freqs[idx], powerSpec[idx,i]) # plot powerSpec against freqs
+    # label axis
+    plt.xlabel("Frequency (Hz)", fontsize=17)
+    plt.ylabel("Power", fontsize=17)
+    # set tick label sizes
+    plt.tick_params(axis='x', labelsize=17)
+    plt.tick_params(axis='y', labelsize=17)
+    # set x-axis bounds
+    plt.xlim([0.75, 4])
+    # display figure
+    plt.show()
