@@ -25,6 +25,10 @@ EYE_UPPER_FRAC = 0.5
 
 BOX_ERROR_MAX = 0.5
 
+# plotting
+FPS = 15
+WINDOW_TIME_SEC = 30
+
 # GLOBAL FUNCTION
 ROIavgRBG = [] # stores the avg RBG values in each ROI (where analysis is performed)
 heartRates = [] # stores hr calculates 
@@ -107,7 +111,7 @@ def getBestROI(frame, faceCascade, previousFaceBox):
     # If many faces detected, use one closest to that from previous frame
     elif len(faces) > 1:
         if previousFaceBox is not None:
-            # Find closest to previous
+            # Find closest to previous frame
             minDist = distanceROI(previousFaceBox, face) # compare rest against first distance
             for face in faces:
                 if distanceROI(previousFaceBox, face) < minDist:
@@ -127,7 +131,7 @@ def getBestROI(frame, faceCascade, previousFaceBox):
         if ADD_BOX_ERROR:
             # add margin of error around faceBox coordinates
             noise = []
-            for i in range(4):
+            for i in range(4): # for each four points x1, x2, y1, y2
                 noise.append(random.uniform(-BOX_ERROR_MAX, BOX_ERROR_MAX))
             (x, y, w, h) = faceBox
             x1 = x + int(noise[0] * w)
@@ -143,3 +147,36 @@ def getBestROI(frame, faceCascade, previousFaceBox):
         roi = getROI(frame, faceBox)
 
     return faceBox, roi
+
+def plotSignals(signals, label):
+    seconds = np.arange(0, WINDOW_TIME_SEC, 1.0 / FPS) # generate x-axis
+    colors = ["r", "g", "b"]
+    fig = plt.figure() # make blank figure
+    fig.patch.set_facecolor('white')
+    for i in range(3):
+        plt.plot(seconds, signals[:,i], colors[i]) # plot each signal against seconds
+    # label axis
+    plt.xlabel('Time (sec)', fontsize=17)
+    plt.ylabel(label, fontsize=17)
+    # set tick label sizes
+    plt.tick_params(axis='x', labelsize=17)
+    plt.tick_params(axis='y', labelsize=17)
+    # display figure
+    plt.show()
+
+def plotSpectrum(freqs, powerSpec):
+    idx = np.argsort(freqs) # sort freqs
+    fig = plt.figure() # make blank figure
+    fig.patch.set_facecolor('white')
+    for i in range(3):
+        plt.plot(freqs[idx], powerSpec[idx,i]) # plot powerSpec against freqs
+    # label axis
+    plt.xlabel("Frequency (Hz)", fontsize=17)
+    plt.ylabel("Power", fontsize=17)
+    # set tick label sizes
+    plt.tick_params(axis='x', labelsize=17)
+    plt.tick_params(axis='y', labelsize=17)
+    # set x-axis bounds
+    plt.xlim([0.75, 4])
+    # display figure
+    plt.show()
