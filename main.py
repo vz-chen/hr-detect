@@ -61,10 +61,10 @@ def getROI(image, faceBox):
     new_faceBox = (x+widthOffset,y+heightOffset, int(w*widthFrac), int(h*heightFrac))
     (x,y,w,h) = new_faceBox
 
-    #adjust bgMask array, set bg to False and fg to True
+    #adjust bgMask array, set bg to False anhd fg to True
     bgMask = np.full(image.shape, True, bool) #initially change all bgMask elements to true
-    bgMask[y:y+h ; x:x+w ; :] = False # setting pixels of bg as False, so rest is true = fg
+    bgMask[y:y+h , x:x+w , :] = False # setting pixels of bg as False, so rest is true = fg
 
-    
+
     return 0
 
