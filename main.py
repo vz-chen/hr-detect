@@ -2,9 +2,9 @@ import sys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import sklearn #may need smth more specific
-import ImageSegmentation
-# import grabcut 
+from sklearn.decomposition import FastICA
+# import ImageSegmentation
+import grabcut 
 import random
 
 # ROI
@@ -26,25 +26,17 @@ EYE_UPPER_FRAC = 0.5
 BOX_ERROR_MAX = 0.5
 
 # plotting
-FPS = 15
+FPS = 60
 WINDOW_TIME_SEC = 30
+WINDOW_NUM_SAMP = int(np.ceil(WINDOW_TIME_SEC * FPS))
+MIN_HR = 40.0
+MAX_HR = 200.0
 
-# GLOBAL FUNCTION
-ROIavgRBG = [] # stores the avg RBG values in each ROI (where analysis is performed)
-heartRates = [] # stores hr calculates 
+
+# GLOBAL VAR
+avgRGB_LIST = [] # stores the avg RBG values in each ROI (where analysis is performed)
+heartRates = [] # stores hr calculated per seconds 
 prevFaceBox = None # stores face box coordinates from previous frame
-
-# prepare camera capture
-cap = cv2.VideoCapture(1) # captures video from front camera
-HAAR_CASCADE = "haarcascade_frontalface_default.xml"
-faceCascade = cv2.CascadeClassifier(HAAR_CASCADE) # face detection trained to detect frontal faces
-
-# capture every frame
-for i in range(20, -1, -1):
-    #while cap.isOpened():
-    ret, frame = cap.read() # ret: bool, is camera available; frame: gets next frame
-    if not ret:
-        break
 
 # OTHER FUNCTIONS
 def imageSegment(image):
@@ -97,24 +89,24 @@ def distanceROI(roi1, roi2):
         squareDistance += (roi1[i] - roi2[i])**2 # distance between x and y coords of two points
     return squareDistance
 
-def getBestROI(frame, faceCascade, previousFaceBox):
+def getBestROI(frame, faceCascade, prevFaceBox):
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # choose shade of grey
     faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
         minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.cv.CV_HAAR_SCALE_IMAGE) # detect faces
-    roi = None
+    
     faceBox = None
 
     # If no face detected, use ROI from previous frame
     if len(faces) == 0:
-        faceBox = previousFaceBox
+        faceBox = prevFaceBox
 
     # If many faces detected, use one closest to that from previous frame
     elif len(faces) > 1:
-        if previousFaceBox is not None:
+        if prevFaceBox is not None:
             # Find closest to previous frame
-            minDist = distanceROI(previousFaceBox, face) # compare rest against first distance
+            minDist = distanceROI(prevFaceBox, face) # compare rest against first distance
             for face in faces:
-                if distanceROI(previousFaceBox, face) < minDist:
+                if distanceROI(prevFaceBox, face) < minDist:
                     faceBox = face
         else:
             # Chooses largest box by area (most likely to be true face)
@@ -143,7 +135,7 @@ def getBestROI(frame, faceCascade, previousFaceBox):
         # Show rectangle
         #(x, y, w, h) = faceBox
         #cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 255, 255), 2)
-
+        
         roi = getROI(frame, faceBox)
 
     return faceBox, roi
@@ -180,3 +172,80 @@ def plotSpectrum(freqs, powerSpec):
     plt.xlim([0.75, 4])
     # display figure
     plt.show()
+
+def getHeartRate(windowFrames, lastHR):
+    # Normalize dataset to achieve zero mean and unit variance
+    mean = np.mean(windowFrames, axis=0)
+    std = np.std(windowFrames, axis=0)
+    normalizedData = (windowFrames - mean)/std
+
+    # Separating data into 3 independent components using ICA
+    ica = FastICA()
+    icaSig = ica.fit_transform(normalizedData) #scale test data and learn scaling parameters
+
+    # Find dominant frequency from power spectrum
+    powerSpec = np.abs(np.fft.fft(icaSig, axis=0))**2 # use FFT to convert independent components (time-domain signals) into freq domain
+    # powerSpec (n,m), n = axis 0 = source signals, m = axis 1 =frequencies
+    freq = np.fft.fftfreq(WINDOW_NUM_SAMP, 1.0/FPS)
+
+    # Calculate max heart rate
+    maxPowerSpec = np.max(powerSpec, axis=1) # find max powerSpec values in freq axis (col)
+    validIdx = np.where(freq >= MIN_HR/60) & (freq <= MAX_HR/60)  # finds indices of freq in range
+    
+    validPowerSpec = maxPowerSpec(validIdx) # new array with max power for valid freq
+    validFreq = freq(validIdx) 
+    maxValidPower = np.argmax(validPowerSpec) # find index of max element in validPowerSpec
+    heartRate = validFreq(maxValidPower)
+
+    return heartRate
+
+# prepare camera capture
+RESULTS_SAVE_DIR = None
+DEFAULT_CAP = None
+videoFile = None
+VIDEO_DIR = None
+
+try:
+    capFile = sys.argv[1]
+except:
+    capFile = DEFAULT_CAP
+cap = cv2.VideoCapture(VIDEO_DIR + videoFile)
+# cap = cv2.VideoCapture(1) # captures video from front camera
+HAAR_CASCADE = "haarcascade_frontalface_default.xml"
+faceCascade = cv2.CascadeClassifier(HAAR_CASCADE) # face detection trained to detect frontal faces
+
+# capture every frame
+for i in range(20, -1, -1):
+    #while cap.isOpened():
+    ret, frame = cap.read() # ret: bool, is camera available; frame: gets next frame
+    if not ret:
+        break
+
+    prevFaceBox, roi = getBestROI(faceBox, faceCascade, prevFaceBox)
+    
+    # Add each frames avgColour to list
+    if roi is not None and np.size(roi) > 0: # face is detected
+        avgColour = np.mean(roi.reshape(-1, roi.shape[-1]), axis=0) # (x,y,z) -> (xy, z), mean calculated for each row (R,G,B)
+        avgRGB_LIST.append(avgColour) 
+
+    # Calculate heart rate
+    if (len(avgRGB_LIST) >= WINDOW_NUM_SAMP) and (len(avgRGB_LIST) % np.ceil(FPS)==0):
+        # windowStartIdx = len(avgRGB_LIST) - WINDOW_NUM_SAMP # index in list avgRGB_LIST where the calculation starts
+        # windowFrames = avgRGB_LIST[windowStartIdx : windowStartIdx+WINDOW_NUM_SAMP]
+        windowFrames = avgRGB_LIST[-WINDOW_NUM_SAMP:] # retrieves last WINDOW_NUM_SAMP elements
+        lastHR = heartRates[-1] if heartRates else None
+        heartRates.append(getHeartRate(windowFrames, lastHR))
+
+    if np.ma.is_masked(roi):
+        roi = np.where(roi.mask == True, 0, roi)
+        cv2.imshow('ROI', roi)
+        cv2.waitKey(5)
+
+print(heartRates)
+# print (videoFile)
+filename = RESULTS_SAVE_DIR + videoFile[0:-4]
+if ADD_BOX_ERROR:
+    filename += "_" + str(BOX_ERROR_MAX)
+np.save(filename, heartRates)
+cap.release()
+cv2.destroyAllWindows()
