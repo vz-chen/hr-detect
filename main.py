@@ -4,13 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import FastICA
 # import ImageSegmentation
-import grabcut 
+# import grabcut 
 import random
 
 # ROI
 REMOVE_EYES = False
 FOREHEAD_ONLY = False
 ADD_BOX_ERROR = False
+USE_SEGMENTATION = False
 
 NUM_ITERATIONS = 0
 faceBox = 0 #temp
@@ -33,10 +34,9 @@ MIN_HR = 40.0
 MAX_HR = 200.0
 
 # prepare camera capture
-RESULTS_SAVE_DIR = None
-DEFAULT_CAP = None
-videoFile = None
-VIDEO_DIR = None
+RESULTS_SAVE_DIR = "./results/" + ("segmentation/" if USE_SEGMENTATION else "no_segmentation/")
+DEFAULT_CAP = "cap.mp4"
+VIDEO_DIR = "./video/"
 
 # GLOBAL VAR
 avgRGB_LIST = [] # stores the avg RBG values in each ROI (where analysis is performed)
@@ -208,7 +208,7 @@ try:
     capFile = sys.argv[1]
 except:
     capFile = DEFAULT_CAP
-cap = cv2.VideoCapture(VIDEO_DIR + videoFile)
+cap = cv2.VideoCapture(VIDEO_DIR + capFile)
 # cap = cv2.VideoCapture(1) # captures video from front camera
 HAAR_CASCADE = "haarcascade_frontalface_default.xml"
 faceCascade = cv2.CascadeClassifier(HAAR_CASCADE) # face detection trained to detect frontal faces
@@ -242,7 +242,7 @@ for i in range(20, -1, -1):
 
 print(heartRates)
 # print (videoFile)
-filename = RESULTS_SAVE_DIR + videoFile[0:-4]
+filename = RESULTS_SAVE_DIR + capFile[0:-4]
 if ADD_BOX_ERROR:
     filename += "_" + str(BOX_ERROR_MAX)
 np.save(filename, heartRates)
