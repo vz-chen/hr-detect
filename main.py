@@ -35,7 +35,7 @@ MAX_HR = 200.0
 
 # prepare camera capture
 RESULTS_SAVE_DIR = "./results/" + ("segmentation/" if USE_SEGMENTATION else "no_segmentation/")
-DEFAULT_CAP = "android-1 (1).mp4"
+DEFAULT_CAP = "cap.mov"
 VIDEO_DIR = "./video/"
 
 # GLOBAL VAR
@@ -98,7 +98,7 @@ def getBestROI(frame, faceCascade, prevFaceBox):
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # choose shade of grey
     faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
         minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.CASCADE_SCALE_IMAGE) # detect faces
-    
+    roi = None 
     faceBox = None
 
     # If no face detected, use ROI from previous frame
@@ -109,7 +109,7 @@ def getBestROI(frame, faceCascade, prevFaceBox):
     elif len(faces) > 1:
         if prevFaceBox is not None:
             # Find closest to previous frame
-            minDist = distanceROI(prevFaceBox, face) # compare rest against first distance
+            minDist = distanceROI(prevFaceBox, faces[0]) # compare rest against first distance
             for face in faces:
                 if distanceROI(prevFaceBox, face) < minDist:
                     faceBox = face
@@ -201,6 +201,7 @@ def getHeartRate(windowFrames, lastHR):
     validFreq = freq(validIdx) 
     maxValidPower = np.argmax(validPowerSpec) # find index of max element in validPowerSpec
     heartRate = validFreq(maxValidPower)
+    print(heartRate)
 
     return heartRate
 
