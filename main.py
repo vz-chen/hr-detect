@@ -95,7 +95,7 @@ def distanceROI(roi1, roi2):
     return squareDistance
 
 def getBestROI(frame, faceCascade, prevFaceBox):
-    grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # choose shade of grey
+    grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # convert frame into greyscale
     faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
         minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.cv.CV_HAAR_SCALE_IMAGE) # detect faces
     
