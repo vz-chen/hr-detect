@@ -13,13 +13,12 @@ FOREHEAD_ONLY = False
 ADD_BOX_ERROR = False
 USE_SEGMENTATION = False
 
-NUM_ITERATIONS = 0
-faceBox = 0 #temp
+NUM_ITERATIONS = 5
 
 MIN_FACE_SIZE = 100
 
-WIDTH_FRAC = 0
-HEIGHT_FRAC = 0
+WIDTH_FRAC = 0.6
+HEIGHT_FRAC = 1
 
 EYE_LOWER_FRAC = 0.25
 EYE_UPPER_FRAC = 0.5
@@ -27,15 +26,15 @@ EYE_UPPER_FRAC = 0.5
 BOX_ERROR_MAX = 0.5
 
 # plotting
-FPS = 60
-WINDOW_TIME_SEC = 30
+FPS = 15
+WINDOW_TIME_SEC = 10
 WINDOW_NUM_SAMP = int(np.ceil(WINDOW_TIME_SEC * FPS))
 MIN_HR = 40.0
 MAX_HR = 200.0
 
 # prepare camera capture
 RESULTS_SAVE_DIR = "./results/" + ("segmentation/" if USE_SEGMENTATION else "no_segmentation/")
-DEFAULT_CAP = "cap.mov"
+DEFAULT_CAP = "android-1.mp4"
 VIDEO_DIR = "./video/"
 
 # GLOBAL VAR
@@ -44,7 +43,7 @@ heartRates = [] # stores hr calculated per seconds
 prevFaceBox = None # stores face box coordinates from previous frame
 
 # OTHER FUNCTIONS
-def imageSegment(image):
+def imageSegment(image, faceBox):
     # initial array to store all pixels of image to be labelled fg or bg later
     mask = np.zeros(image.shape[:2], np.uint8) 
     # array of zeros with size as image (height, width, ignoring the third tuple: channel)
@@ -94,7 +93,7 @@ def distanceROI(roi1, roi2):
         squareDistance += (roi1[i] - roi2[i])**2 # distance between x and y coords of two points
     return squareDistance
 
-def getBestROI(frame, faceCascade, prevFaceBox):
+def getBestROI1(frame, faceCascade, prevFaceBox):
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # convert frame into greyscale
     faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
         minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.CASCADE_SCALE_IMAGE) # detect faces
@@ -144,6 +143,55 @@ def getBestROI(frame, faceCascade, prevFaceBox):
         roi = getROI(frame, faceBox)
 
     return faceBox, roi
+def getBestROI(frame, faceCascade, previousFaceBox):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = faceCascade.detectMultiScale(gray, scaleFactor=1.1, 
+        minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.CASCADE_SCALE_IMAGE)
+    roi = None
+    faceBox = None
+
+    # If no face detected, use ROI from previous frame
+    if len(faces) == 0:
+        faceBox = previousFaceBox
+
+    # if many faces detected, use one closest to that from previous frame
+    elif len(faces) > 1:
+        if previousFaceBox is not None:
+            # Find closest
+            minDist = float("inf")
+            for face in faces:
+                if distanceROI(previousFaceBox, face) < minDist:
+                    faceBox = face
+        else:
+            # Chooses largest box by area (most likely to be true face)
+            maxArea = 0
+            for face in faces:
+                if (face[2] * face[3]) > maxArea:
+                    faceBox = face
+
+    # If only one face dectected, use it!
+    else:
+        faceBox = faces[0]
+
+    if faceBox is not None:
+        if ADD_BOX_ERROR:
+            noise = []
+            for i in range(4):
+                noise.append(random.uniform(-BOX_ERROR_MAX, BOX_ERROR_MAX))
+            (x, y, w, h) = faceBox
+            x1 = x + int(noise[0] * w)
+            y1 = y + int(noise[1] * h)
+            x2 = x + w + int(noise[2] * w)
+            y2 = y + h + int(noise[3] * h)
+            faceBox = (x1, y1, x2-x1, y2-y1)
+
+        # Show rectangle
+        (x, y, w, h) = faceBox
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 0), 2)
+
+        roi = getROI(frame, faceBox)
+
+    return faceBox, roi
 
 def plotSignals(signals, label):
     seconds = np.arange(0, WINDOW_TIME_SEC, 1.0 / FPS) # generate x-axis
@@ -178,7 +226,7 @@ def plotSpectrum(freqs, powerSpec):
     # display figure
     plt.show()
 
-def getHeartRate(windowFrames, lastHR):
+def getHeartRate1(windowFrames, lastHR):
     # Normalize dataset to achieve zero mean and unit variance
     mean = np.mean(windowFrames, axis=0)
     std = np.std(windowFrames, axis=0)
@@ -195,15 +243,43 @@ def getHeartRate(windowFrames, lastHR):
 
     # Calculate max heart rate
     maxPowerSpec = np.max(powerSpec, axis=1) # find max powerSpec values in freq axis (col)
-    validIdx = np.where(freq >= MIN_HR/60) & (freq <= MAX_HR/60)  # finds indices of freq in range
+    validIdx = np.where(np.logical_and(freq >= MIN_HR/60, freq <= MAX_HR/60))  # finds indices of freq in range
     
-    validPowerSpec = maxPowerSpec(validIdx) # new array with max power for valid freq
-    validFreq = freq(validIdx) 
+    validPowerSpec = maxPowerSpec[validIdx] # new array with max power for valid freq
+    validFreq = freq[validIdx]
     maxValidPower = np.argmax(validPowerSpec) # find index of max element in validPowerSpec
-    heartRate = validFreq(maxValidPower)
+    heartRate = validFreq[maxValidPower]
     print(heartRate)
 
     return heartRate
+def getHeartRate(window, lastHR):
+    # Normalize across the window to have zero-mean and unit variance
+    mean = np.mean(window, axis=0)
+    std = np.std(window, axis=0)
+    normalized = (window - mean) / std
+
+    # Separate into three source signals using ICA
+    ica = FastICA()
+    srcSig = ica.fit_transform(normalized)
+
+    # Find power spectrum
+    powerSpec = np.abs(np.fft.fft(srcSig, axis=0))**2
+    freqs = np.fft.fftfreq(WINDOW_NUM_SAMP, 1.0 / FPS)
+
+    # Find heart rate
+    maxPwrSrc = np.max(powerSpec, axis=1)
+    validIdx = np.where((freqs >= MIN_HR / 60) & (freqs <= MAX_HR / 60))
+    validPwr = maxPwrSrc[validIdx]
+    validFreqs = freqs[validIdx]
+    maxPwrIdx = np.argmax(validPwr) 
+    hr = validFreqs[maxPwrIdx]
+    print(hr)
+
+    plotSignals(normalized, "Normalized color intensity")
+    plotSignals(srcSig, "Source signal strength")
+    plotSpectrum(freqs, powerSpec)
+
+    return hr
 
 try:
     capFile = sys.argv[1]
@@ -237,9 +313,9 @@ while True:
 
     # Calculate heart rate
     if (len(avgRGB_LIST) >= WINDOW_NUM_SAMP) and (len(avgRGB_LIST) % np.ceil(FPS)==0):
-        # windowStartIdx = len(avgRGB_LIST) - WINDOW_NUM_SAMP # index in list avgRGB_LIST where the calculation starts
-        # windowFrames = avgRGB_LIST[windowStartIdx : windowStartIdx+WINDOW_NUM_SAMP]
-        windowFrames = avgRGB_LIST[-WINDOW_NUM_SAMP:] # retrieves last WINDOW_NUM_SAMP elements
+        windowStartIdx = len(avgRGB_LIST) - WINDOW_NUM_SAMP # index in list avgRGB_LIST where the calculation starts
+        windowFrames = avgRGB_LIST[windowStartIdx : windowStartIdx+WINDOW_NUM_SAMP]
+        # windowFrames = avgRGB_LIST[-WINDOW_NUM_SAMP:] # retrieves last WINDOW_NUM_SAMP elements
         lastHR = heartRates[-1] if heartRates else None
         heartRates.append(getHeartRate(windowFrames, lastHR))
 
