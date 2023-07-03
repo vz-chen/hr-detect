@@ -35,7 +35,7 @@ MAX_HR = 200.0
 
 # prepare camera capture
 RESULTS_SAVE_DIR = "./results/" + ("segmentation/" if USE_SEGMENTATION else "no_segmentation/")
-DEFAULT_CAP = "cap.mp4"
+DEFAULT_CAP = "android-1 (1).mp4"
 VIDEO_DIR = "./video/"
 
 # GLOBAL VAR
@@ -97,7 +97,7 @@ def distanceROI(roi1, roi2):
 def getBestROI(frame, faceCascade, prevFaceBox):
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # choose shade of grey
     faces = faceCascade.detectMultiScale(grey, scaleFactor=1.1, 
-        minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.cv.CV_HAAR_SCALE_IMAGE) # detect faces
+        minNeighbors=5, minSize=(MIN_FACE_SIZE, MIN_FACE_SIZE), flags=cv2.CASCADE_SCALE_IMAGE) # detect faces
     
     faceBox = None
 
@@ -214,13 +214,20 @@ HAAR_CASCADE = "haarcascade_frontalface_default.xml"
 faceCascade = cv2.CascadeClassifier(HAAR_CASCADE) # face detection trained to detect frontal faces
 
 # capture every frame
-for i in range(20, -1, -1):
+while True:
     #while cap.isOpened():
     ret, frame = cap.read() # ret: bool, is camera available; frame: gets next frame
     if not ret:
         break
 
-    prevFaceBox, roi = getBestROI(faceBox, faceCascade, prevFaceBox)
+     # Display the frame
+    cv2.imshow('Video', frame)
+
+    # Break the loop on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+    prevFaceBox, roi = getBestROI(frame, faceCascade, prevFaceBox)
     
     # Add each frames avgColour to list
     if roi is not None and np.size(roi) > 0: # face is detected
