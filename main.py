@@ -32,6 +32,11 @@ WINDOW_NUM_SAMP = int(np.ceil(WINDOW_TIME_SEC * FPS))
 MIN_HR = 40.0
 MAX_HR = 200.0
 
+# prepare camera capture
+RESULTS_SAVE_DIR = None
+DEFAULT_CAP = None
+videoFile = None
+VIDEO_DIR = None
 
 # GLOBAL VAR
 avgRGB_LIST = [] # stores the avg RBG values in each ROI (where analysis is performed)
@@ -198,12 +203,6 @@ def getHeartRate(windowFrames, lastHR):
     heartRate = validFreq(maxValidPower)
 
     return heartRate
-
-# prepare camera capture
-RESULTS_SAVE_DIR = None
-DEFAULT_CAP = None
-videoFile = None
-VIDEO_DIR = None
 
 try:
     capFile = sys.argv[1]
